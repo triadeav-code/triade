@@ -95,84 +95,75 @@
       return `${urlBase}?matt_tool=${MATT_TOOL}&matt_word=${MATT_WORD}&forceInApp=true`;
     }
 
-    // Processa os dados retornados pela API via JSONP
-    function renderizarProdutos(response) {
-      const grid = document.getElementById('catalog-grid');
-      const count = document.getElementById('results-count');
-
-      // Extrai os dados independentemente do formato do payload
-      const data = response.body || response;
-
-      if (!data || !data.results || data.results.length === 0) {
-        grid.innerHTML = `
-          <div class="col-span-full py-12 text-center text-gray-400">
-            <p class="text-base mb-2">Nenhum equipamento encontrado.</p>
-            <p class="text-xs text-gray-500">Tente buscar por termos como "projetor", "camera ptz" ou "mesa de som".</p>
-          </div>`;
-        count.innerText = '0 produtos';
-        return;
-      }
-
-      grid.innerHTML = '';
-      const produtosExibidos = data.results.slice(0, 12);
-      count.innerText = `${produtosExibidos.length} produtos exibidos`;
-
-      produtosExibidos.forEach(produto => {
-        const linkMonetizado = gerarLinkAfiliado(produto.permalink);
-        const imagemHD = produto.thumbnail ? produto.thumbnail.replace('-I.jpg', '-O.jpg').replace('http://', 'https://') : '';
-        const precoFormatado = produto.price ? produto.price.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : 'Consulte';
-
-        grid.innerHTML += `
-          <div class="bg-gray-800 border border-gray-700 rounded-xl p-4 flex flex-col justify-between hover:border-blue-500 transition shadow-lg">
-            <div>
-              <div class="w-full h-48 bg-gray-900 rounded-lg mb-4 p-2 flex items-center justify-center overflow-hidden">
-                <img src="${imagemHD}" alt="${produto.title}" class="max-h-full max-w-full object-contain" loading="lazy">
-              </div>
-              <h3 class="text-sm font-semibold text-gray-200 line-clamp-2 mb-2" title="${produto.title}">${produto.title}</h3>
-              <p class="text-lg font-black text-green-400 mb-4">${precoFormatado}</p>
-            </div>
-
-            <a 
-              href="${linkMonetizado}" 
-              target="_blank" 
-              rel="noopener noreferrer" 
-              class="w-full text-center bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold py-2.5 rounded-lg transition block"
-            >
-              Ver no Mercado Livre
-            </a>
-          </div>
-        `;
-      });
-    }
-
-    // Realiza a chamada JSONP eliminando erros de CORS
-    function buscar(termo) {
+    async function buscar(termo) {
       const input = document.getElementById('search-input');
       const grid = document.getElementById('catalog-grid');
       const title = document.getElementById('search-title');
+      const count = document.getElementById('results-count');
 
       input.value = termo;
       title.innerText = `Resultados para: "${termo}"`;
       grid.innerHTML = '<div class="col-span-full py-12 text-center text-gray-400">Consultando catálogo em tempo real...</div>';
 
-      // Remove script de busca anterior para evitar acúmulo no DOM
-      const scriptAntigo = document.getElementById('ml-jsonp-script');
-      if (scriptAntigo) scriptAntigo.remove();
+      const mlApiUrl = `https://api.mercadolibre.com/sites/MLB/search?q=${encodeURIComponent(termo)}`;
+      const endpoint = `https://api.allorigins.win/raw?url=${encodeURIComponent(mlApiUrl)}`;
 
-      // Cria a tag script dinamicamente chamando a função global callback
-      const script = document.createElement('script');
-      script.id = 'ml-jsonp-script';
-      script.src = `https://api.mercadolibre.com/sites/MLB/search?q=${encodeURIComponent(termo)}&callback=renderizarProdutos`;
-      
-      script.onerror = () => {
+      try {
+        const response = await fetch(endpoint);
+        if (!response.ok) throw new Error("Erro na resposta da rede");
+
+        const data = await response.json();
+
+        if (!data || !data.results || data.results.length === 0) {
+          grid.innerHTML = `
+            <div class="col-span-full py-12 text-center text-gray-400">
+              <p class="text-base mb-2">Nenhum equipamento encontrado para "${termo}".</p>
+              <p class="text-xs text-gray-500">Tente buscar por termos como "projetor", "camera ptz" ou "mesa de som".</p>
+            </div>`;
+          count.innerText = '0 produtos';
+          return;
+        }
+
+        grid.innerHTML = '';
+        const produtosExibidos = data.results.slice(0, 12);
+        count.innerText = `${produtosExibidos.length} produtos exibidos`;
+
+        produtosExibidos.forEach(produto => {
+          const linkMonetizado = gerarLinkAfiliado(produto.permalink);
+          const imagemHD = produto.thumbnail ? produto.thumbnail.replace('-I.jpg', '-O.jpg').replace('http://', 'https://') : '';
+          const precoFormatado = produto.price ? produto.price.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : 'Consulte';
+
+          grid.innerHTML += `
+            <div class="bg-gray-800 border border-gray-700 rounded-xl p-4 flex flex-col justify-between hover:border-blue-500 transition shadow-lg">
+              <div>
+                <div class="w-full h-48 bg-gray-900 rounded-lg mb-4 p-2 flex items-center justify-center overflow-hidden">
+                  <img src="${imagemHD}" alt="${produto.title}" class="max-h-full max-w-full object-contain" loading="lazy">
+                </div>
+                <h3 class="text-sm font-semibold text-gray-200 line-clamp-2 mb-2" title="${produto.title}">${produto.title}</h3>
+                <p class="text-lg font-black text-green-400 mb-4">${precoFormatado}</p>
+              </div>
+
+              <a 
+                href="${linkMonetizado}" 
+                target="_blank" 
+                rel="noopener noreferrer" 
+                class="w-full text-center bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold py-2.5 rounded-lg transition block"
+              >
+                Ver no Mercado Livre
+              </a>
+            </div>
+          `;
+        });
+
+      } catch (error) {
+        console.error("Erro na busca:", error);
         grid.innerHTML = `
           <div class="col-span-full py-12 text-center text-red-400">
-            <p class="text-base mb-2">Falha temporária na conexão com a API do Mercado Livre.</p>
-            <p class="text-xs text-gray-400">Tente atualizar a página ou pesquisar outro termo.</p>
+            <p class="text-base mb-2">Falha temporária na conexão com o catálogo.</p>
+            <p class="text-xs text-gray-400">Tente atualizar a página ou fazer uma nova busca.</p>
           </div>`;
-      };
-
-      document.body.appendChild(script);
+        count.innerText = '';
+      }
     }
 
     // Listener do Formulário
@@ -182,7 +173,7 @@
       if (termo) buscar(termo);
     });
 
-    // Carga inicial automatizada
+    // Carga inicial automatizada ao abrir a página
     window.addEventListener('DOMContentLoaded', () => {
       buscar('camera ptz');
     });

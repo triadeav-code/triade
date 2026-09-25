@@ -30,7 +30,7 @@
         <input 
           type="text" 
           id="search-input" 
-          placeholder="Ex: Câmera PTZ NDI, Projetor Laser..." 
+          placeholder="Ex: Projetor Epson, Câmera PTZ NDI..." 
           class="w-full bg-gray-900 border border-gray-700 text-white px-4 py-2 rounded-lg focus:outline-none focus:border-blue-500 text-sm"
           required
         >
@@ -54,7 +54,7 @@
         <button onclick="buscar('camera ptz')" class="bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs px-3 py-2 rounded-lg border border-gray-700 transition">
           📹 Câmeras PTZ
         </button>
-        <button onclick="buscar('projetor laser')" class="bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs px-3 py-2 rounded-lg border border-gray-700 transition">
+        <button onclick="buscar('projetor epson')" class="bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs px-3 py-2 rounded-lg border border-gray-700 transition">
           📽️ Projeção Laser
         </button>
         <button onclick="buscar('iluminador led dmx')" class="bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs px-3 py-2 rounded-lg border border-gray-700 transition">
@@ -97,7 +97,7 @@
       return `${urlBase}?matt_tool=${MATT_TOOL}&matt_word=${MATT_WORD}&forceInApp=true`;
     }
 
-    // Função de Busca na API do Mercado Livre Otimizada
+    // Função de Busca com Proxy Anti-CORS
     async function buscar(termo) {
       const input = document.getElementById('search-input');
       const grid = document.getElementById('catalog-grid');
@@ -109,21 +109,28 @@
       grid.innerHTML = '<div class="col-span-full py-12 text-center text-gray-400">Consultando catálogo em tempo real...</div>';
 
       try {
-        const urlApi = `https://api.mercadolibre.com/sites/MLB/search?q=${encodeURIComponent(termo)}`;
-        const response = await fetch(urlApi);
+        // Endpoint original do Mercado Livre
+        const targetUrl = `https://api.mercadolibre.com/sites/MLB/search?q=${encodeURIComponent(termo)}`;
+        
+        // Proxy AllOrigins para ignorar bloqueio de CORS no GitHub Pages
+        const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(targetUrl)}`;
+
+        const response = await fetch(proxyUrl);
         
         if (!response.ok) {
-          throw new Error(`Erro HTTP: ${response.status}`);
+          throw new Error(`Erro na conexão com o proxy: ${response.status}`);
         }
 
-        const data = await response.json();
+        const wrapperData = await response.json();
+        const data = JSON.parse(wrapperData.contents); // Conteúdo real retornado pelo Mercado Livre
+
         grid.innerHTML = '';
 
         if (!data.results || data.results.length === 0) {
           grid.innerHTML = `
             <div class="col-span-full py-12 text-center text-gray-400">
               <p class="text-base mb-2">Nenhum equipamento encontrado para "${termo}".</p>
-              <p class="text-xs text-gray-500">Tente termos mais abrangentes como "projetor", "camera ptz" ou "mesa de som".</p>
+              <p class="text-xs text-gray-500">Tente termos como "projetor epson", "camera ptz" ou "mesa de som".</p>
             </div>`;
           count.innerText = '0 produtos';
           return;
@@ -160,8 +167,8 @@
         });
 
       } catch (error) {
-        console.error("Erro na busca:", error);
-        grid.innerHTML = '<div class="col-span-full py-12 text-center text-red-400">Falha ao carregar os dados do Mercado Livre. Tente novamente em instantes.</div>';
+        console.error("Erro na busca via proxy:", error);
+        grid.innerHTML = '<div class="col-span-full py-12 text-center text-red-400">Falha ao carregar os dados. Tente atualizar a página.</div>';
       }
     }
 
@@ -174,7 +181,7 @@
 
     // Carga inicial automatizada
     window.addEventListener('DOMContentLoaded', () => {
-      buscar('camera ptz');
+      buscar('projetor epson');
     });
   </script>
 </body>

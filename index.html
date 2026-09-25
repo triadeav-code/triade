@@ -86,74 +86,34 @@
 
   <!-- Script de Automação & Busca Dinâmica -->
   <script>
-    // Configurações Oficiais de Afiliado (Tríade)
     const MATT_TOOL = "91496197";
     const MATT_WORD = "triadeshop";
 
-    // Converte permalink normal da API para o seu Link de Afiliado Monetizado
     function gerarLinkAfiliado(permalink) {
       if (!permalink) return "#";
       const urlBase = permalink.split('?')[0];
       return `${urlBase}?matt_tool=${MATT_TOOL}&matt_word=${MATT_WORD}&forceInApp=true`;
     }
 
-    // Função de Busca no Mercado Livre com Multi-Fallback de Conexão
-    async function buscar(termo) {
-      const input = document.getElementById('search-input');
+    // Processa os dados retornados pela API via JSONP
+    function renderizarProdutos(response) {
       const grid = document.getElementById('catalog-grid');
-      const title = document.getElementById('search-title');
       const count = document.getElementById('results-count');
 
-      input.value = termo;
-      title.innerText = `Resultados para: "${termo}"`;
-      grid.innerHTML = '<div class="col-span-full py-12 text-center text-gray-400">Consultando catálogo em tempo real...</div>';
+      // Extrai os dados independentemente do formato do payload
+      const data = response.body || response;
 
-      const targetUrl = `https://api.mercadolibre.com/sites/MLB/search?q=${encodeURIComponent(termo)}`;
-      
-      // Lista de proxies resilientes para garantir a entrega dos dados
-      const endpoints = [
-        `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`,
-        `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(targetUrl)}`,
-        targetUrl
-      ];
-
-      let data = null;
-
-      for (const url of endpoints) {
-        try {
-          const response = await fetch(url);
-          if (response.ok) {
-            data = await response.json();
-            if (typeof data === 'string') data = JSON.parse(data);
-            if (data && data.results) break;
-          }
-        } catch (e) {
-          console.warn(`Tentativa falhou para ${url}, tentando próximo proxy...`);
-        }
-      }
-
-      if (!data || !data.results) {
-        grid.innerHTML = `
-          <div class="col-span-full py-12 text-center text-red-400">
-            <p class="text-base mb-2">Erro de conexão com o Mercado Livre.</p>
-            <p class="text-xs text-gray-400">Aguarde alguns segundos e tente novamente.</p>
-          </div>`;
-        count.innerText = '';
-        return;
-      }
-
-      grid.innerHTML = '';
-
-      if (data.results.length === 0) {
+      if (!data || !data.results || data.results.length === 0) {
         grid.innerHTML = `
           <div class="col-span-full py-12 text-center text-gray-400">
-            <p class="text-base mb-2">Nenhum equipamento encontrado para "${termo}".</p>
+            <p class="text-base mb-2">Nenhum equipamento encontrado.</p>
             <p class="text-xs text-gray-500">Tente buscar por termos como "projetor", "camera ptz" ou "mesa de som".</p>
           </div>`;
         count.innerText = '0 produtos';
         return;
       }
 
+      grid.innerHTML = '';
       const produtosExibidos = data.results.slice(0, 12);
       count.innerText = `${produtosExibidos.length} produtos exibidos`;
 
@@ -183,6 +143,36 @@
           </div>
         `;
       });
+    }
+
+    // Realiza a chamada JSONP eliminando erros de CORS
+    function buscar(termo) {
+      const input = document.getElementById('search-input');
+      const grid = document.getElementById('catalog-grid');
+      const title = document.getElementById('search-title');
+
+      input.value = termo;
+      title.innerText = `Resultados para: "${termo}"`;
+      grid.innerHTML = '<div class="col-span-full py-12 text-center text-gray-400">Consultando catálogo em tempo real...</div>';
+
+      // Remove script de busca anterior para evitar acúmulo no DOM
+      const scriptAntigo = document.getElementById('ml-jsonp-script');
+      if (scriptAntigo) scriptAntigo.remove();
+
+      // Cria a tag script dinamicamente chamando a função global callback
+      const script = document.createElement('script');
+      script.id = 'ml-jsonp-script';
+      script.src = `https://api.mercadolibre.com/sites/MLB/search?q=${encodeURIComponent(termo)}&callback=renderizarProdutos`;
+      
+      script.onerror = () => {
+        grid.innerHTML = `
+          <div class="col-span-full py-12 text-center text-red-400">
+            <p class="text-base mb-2">Falha temporária na conexão com a API do Mercado Livre.</p>
+            <p class="text-xs text-gray-400">Tente atualizar a página ou pesquisar outro termo.</p>
+          </div>`;
+      };
+
+      document.body.appendChild(script);
     }
 
     // Listener do Formulário

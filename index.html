@@ -30,7 +30,7 @@
         <input 
           type="text" 
           id="search-input" 
-          placeholder="Ex: Projetor Epson, Câmera PTZ NDI..." 
+          placeholder="Ex: Câmera PTZ NDI, Projetor Laser..." 
           class="w-full bg-gray-900 border border-gray-700 text-white px-4 py-2 rounded-lg focus:outline-none focus:border-blue-500 text-sm"
           required
         >
@@ -54,7 +54,7 @@
         <button onclick="buscar('camera ptz')" class="bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs px-3 py-2 rounded-lg border border-gray-700 transition">
           📹 Câmeras PTZ
         </button>
-        <button onclick="buscar('projetor epson')" class="bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs px-3 py-2 rounded-lg border border-gray-700 transition">
+        <button onclick="buscar('projetor laser')" class="bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs px-3 py-2 rounded-lg border border-gray-700 transition">
           📽️ Projeção Laser
         </button>
         <button onclick="buscar('iluminador led dmx')" class="bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs px-3 py-2 rounded-lg border border-gray-700 transition">
@@ -97,7 +97,7 @@
       return `${urlBase}?matt_tool=${MATT_TOOL}&matt_word=${MATT_WORD}&forceInApp=true`;
     }
 
-    // Função de Busca com Proxy Anti-CORS
+    // Função de Busca no Mercado Livre com Multi-Fallback de Conexão
     async function buscar(termo) {
       const input = document.getElementById('search-input');
       const grid = document.getElementById('catalog-grid');
@@ -108,68 +108,81 @@
       title.innerText = `Resultados para: "${termo}"`;
       grid.innerHTML = '<div class="col-span-full py-12 text-center text-gray-400">Consultando catálogo em tempo real...</div>';
 
-      try {
-        // Endpoint original do Mercado Livre
-        const targetUrl = `https://api.mercadolibre.com/sites/MLB/search?q=${encodeURIComponent(termo)}`;
-        
-        // Proxy AllOrigins para ignorar bloqueio de CORS no GitHub Pages
-        const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(targetUrl)}`;
+      const targetUrl = `https://api.mercadolibre.com/sites/MLB/search?q=${encodeURIComponent(termo)}`;
+      
+      // Lista de proxies resilientes para garantir a entrega dos dados
+      const endpoints = [
+        `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`,
+        `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(targetUrl)}`,
+        targetUrl
+      ];
 
-        const response = await fetch(proxyUrl);
-        
-        if (!response.ok) {
-          throw new Error(`Erro na conexão com o proxy: ${response.status}`);
+      let data = null;
+
+      for (const url of endpoints) {
+        try {
+          const response = await fetch(url);
+          if (response.ok) {
+            data = await response.json();
+            if (typeof data === 'string') data = JSON.parse(data);
+            if (data && data.results) break;
+          }
+        } catch (e) {
+          console.warn(`Tentativa falhou para ${url}, tentando próximo proxy...`);
         }
-
-        const wrapperData = await response.json();
-        const data = JSON.parse(wrapperData.contents); // Conteúdo real retornado pelo Mercado Livre
-
-        grid.innerHTML = '';
-
-        if (!data.results || data.results.length === 0) {
-          grid.innerHTML = `
-            <div class="col-span-full py-12 text-center text-gray-400">
-              <p class="text-base mb-2">Nenhum equipamento encontrado para "${termo}".</p>
-              <p class="text-xs text-gray-500">Tente termos como "projetor epson", "camera ptz" ou "mesa de som".</p>
-            </div>`;
-          count.innerText = '0 produtos';
-          return;
-        }
-
-        const produtosExibidos = data.results.slice(0, 12);
-        count.innerText = `${produtosExibidos.length} produtos exibidos`;
-
-        produtosExibidos.forEach(produto => {
-          const linkMonetizado = gerarLinkAfiliado(produto.permalink);
-          const imagemHD = produto.thumbnail ? produto.thumbnail.replace('-I.jpg', '-O.jpg').replace('http://', 'https://') : '';
-          const precoFormatado = produto.price ? produto.price.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : 'Consulte';
-
-          grid.innerHTML += `
-            <div class="bg-gray-800 border border-gray-700 rounded-xl p-4 flex flex-col justify-between hover:border-blue-500 transition shadow-lg">
-              <div>
-                <div class="w-full h-48 bg-gray-900 rounded-lg mb-4 p-2 flex items-center justify-center overflow-hidden">
-                  <img src="${imagemHD}" alt="${produto.title}" class="max-h-full max-w-full object-contain" loading="lazy">
-                </div>
-                <h3 class="text-sm font-semibold text-gray-200 line-clamp-2 mb-2" title="${produto.title}">${produto.title}</h3>
-                <p class="text-lg font-black text-green-400 mb-4">${precoFormatado}</p>
-              </div>
-
-              <a 
-                href="${linkMonetizado}" 
-                target="_blank" 
-                rel="noopener noreferrer" 
-                class="w-full text-center bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold py-2.5 rounded-lg transition block"
-              >
-                Ver no Mercado Livre
-              </a>
-            </div>
-          `;
-        });
-
-      } catch (error) {
-        console.error("Erro na busca via proxy:", error);
-        grid.innerHTML = '<div class="col-span-full py-12 text-center text-red-400">Falha ao carregar os dados. Tente atualizar a página.</div>';
       }
+
+      if (!data || !data.results) {
+        grid.innerHTML = `
+          <div class="col-span-full py-12 text-center text-red-400">
+            <p class="text-base mb-2">Erro de conexão com o Mercado Livre.</p>
+            <p class="text-xs text-gray-400">Aguarde alguns segundos e tente novamente.</p>
+          </div>`;
+        count.innerText = '';
+        return;
+      }
+
+      grid.innerHTML = '';
+
+      if (data.results.length === 0) {
+        grid.innerHTML = `
+          <div class="col-span-full py-12 text-center text-gray-400">
+            <p class="text-base mb-2">Nenhum equipamento encontrado para "${termo}".</p>
+            <p class="text-xs text-gray-500">Tente buscar por termos como "projetor", "camera ptz" ou "mesa de som".</p>
+          </div>`;
+        count.innerText = '0 produtos';
+        return;
+      }
+
+      const produtosExibidos = data.results.slice(0, 12);
+      count.innerText = `${produtosExibidos.length} produtos exibidos`;
+
+      produtosExibidos.forEach(produto => {
+        const linkMonetizado = gerarLinkAfiliado(produto.permalink);
+        const imagemHD = produto.thumbnail ? produto.thumbnail.replace('-I.jpg', '-O.jpg').replace('http://', 'https://') : '';
+        const precoFormatado = produto.price ? produto.price.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : 'Consulte';
+
+        grid.innerHTML += `
+          <div class="bg-gray-800 border border-gray-700 rounded-xl p-4 flex flex-col justify-between hover:border-blue-500 transition shadow-lg">
+            <div>
+              <div class="w-full h-48 bg-gray-900 rounded-lg mb-4 p-2 flex items-center justify-center overflow-hidden">
+                <img src="${imagemHD}" alt="${produto.title}" class="max-h-full max-w-full object-contain" loading="lazy">
+              </div>
+              <h3 class="text-sm font-semibold text-gray-200 line-clamp-2 mb-2" title="${produto.title}">${produto.title}</h3>
+              <p class="text-lg font-black text-green-400 mb-4">${precoFormatado}</p>
+            </div>
+
+            <a 
+              href="${linkMonetizado}" 
+              target="_blank" 
+              rel="noopener noreferrer" 
+              class="w-full text-center bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold py-2.5 rounded-lg transition block"
+            >
+              Ver no Mercado Livre
+            </a>
+          </div>
+        `;
+      });
     }
 
     // Listener do Formulário
@@ -181,7 +194,7 @@
 
     // Carga inicial automatizada
     window.addEventListener('DOMContentLoaded', () => {
-      buscar('projetor epson');
+      buscar('camera ptz');
     });
   </script>
 </body>

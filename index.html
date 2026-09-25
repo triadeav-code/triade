@@ -30,7 +30,7 @@
         <input 
           type="text" 
           id="search-input" 
-          placeholder="Ex: Câmera PTZ NDI, Projetor Laser 5000 Lumens..." 
+          placeholder="Ex: Câmera PTZ NDI, Projetor Laser..." 
           class="w-full bg-gray-900 border border-gray-700 text-white px-4 py-2 rounded-lg focus:outline-none focus:border-blue-500 text-sm"
           required
         >
@@ -51,16 +51,16 @@
     <section class="mb-8">
       <h2 class="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-3">Categorias Recomendadas</h2>
       <div class="flex flex-wrap gap-2">
-        <button onclick="buscar('camera ptz live igreja')" class="bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs px-3 py-2 rounded-lg border border-gray-700 transition">
+        <button onclick="buscar('camera ptz')" class="bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs px-3 py-2 rounded-lg border border-gray-700 transition">
           📹 Câmeras PTZ
         </button>
-        <button onclick="buscar('projetor laser short throw')" class="bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs px-3 py-2 rounded-lg border border-gray-700 transition">
+        <button onclick="buscar('projetor laser')" class="bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs px-3 py-2 rounded-lg border border-gray-700 transition">
           📽️ Projeção Laser
         </button>
-        <button onclick="buscar('iluminador led fresnel dmx')" class="bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs px-3 py-2 rounded-lg border border-gray-700 transition">
+        <button onclick="buscar('iluminador led dmx')" class="bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs px-3 py-2 rounded-lg border border-gray-700 transition">
           💡 Iluminação DMX
         </button>
-        <button onclick="buscar('mesa de som digital yamaha')" class="bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs px-3 py-2 rounded-lg border border-gray-700 transition">
+        <button onclick="buscar('mesa de som yamaha')" class="bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs px-3 py-2 rounded-lg border border-gray-700 transition">
           🎛️ Áudio & Mesas
         </button>
       </div>
@@ -97,7 +97,7 @@
       return `${urlBase}?matt_tool=${MATT_TOOL}&matt_word=${MATT_WORD}&forceInApp=true`;
     }
 
-    // Função de Busca na API do Mercado Livre
+    // Função de Busca na API do Mercado Livre Otimizada
     async function buscar(termo) {
       const input = document.getElementById('search-input');
       const grid = document.getElementById('catalog-grid');
@@ -109,29 +109,39 @@
       grid.innerHTML = '<div class="col-span-full py-12 text-center text-gray-400">Consultando catálogo em tempo real...</div>';
 
       try {
-        const response = await fetch(`https://api.mercadolibre.com/sites/MLB/search?q=${encodeURIComponent(termo)}&limit=12`);
-        const data = await response.json();
+        const urlApi = `https://api.mercadolibre.com/sites/MLB/search?q=${encodeURIComponent(termo)}`;
+        const response = await fetch(urlApi);
+        
+        if (!response.ok) {
+          throw new Error(`Erro HTTP: ${response.status}`);
+        }
 
+        const data = await response.json();
         grid.innerHTML = '';
 
         if (!data.results || data.results.length === 0) {
-          grid.innerHTML = '<div class="col-span-full py-12 text-center text-gray-400">Nenhum equipamento encontrado para este termo.</div>';
-          count.innerText = '';
+          grid.innerHTML = `
+            <div class="col-span-full py-12 text-center text-gray-400">
+              <p class="text-base mb-2">Nenhum equipamento encontrado para "${termo}".</p>
+              <p class="text-xs text-gray-500">Tente termos mais abrangentes como "projetor", "camera ptz" ou "mesa de som".</p>
+            </div>`;
+          count.innerText = '0 produtos';
           return;
         }
 
-        count.innerText = `${data.results.length} produtos exibidos`;
+        const produtosExibidos = data.results.slice(0, 12);
+        count.innerText = `${produtosExibidos.length} produtos exibidos`;
 
-        data.results.forEach(produto => {
+        produtosExibidos.forEach(produto => {
           const linkMonetizado = gerarLinkAfiliado(produto.permalink);
-          const imagemHD = produto.thumbnail.replace('-I.jpg', '-O.jpg').replace('http://', 'https://');
-          const precoFormatado = produto.price.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+          const imagemHD = produto.thumbnail ? produto.thumbnail.replace('-I.jpg', '-O.jpg').replace('http://', 'https://') : '';
+          const precoFormatado = produto.price ? produto.price.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : 'Consulte';
 
           grid.innerHTML += `
             <div class="bg-gray-800 border border-gray-700 rounded-xl p-4 flex flex-col justify-between hover:border-blue-500 transition shadow-lg">
               <div>
                 <div class="w-full h-48 bg-gray-900 rounded-lg mb-4 p-2 flex items-center justify-center overflow-hidden">
-                  <img src="${imagemHD}" alt="${produto.title}" class="max-h-full max-w-full object-contain">
+                  <img src="${imagemHD}" alt="${produto.title}" class="max-h-full max-w-full object-contain" loading="lazy">
                 </div>
                 <h3 class="text-sm font-semibold text-gray-200 line-clamp-2 mb-2" title="${produto.title}">${produto.title}</h3>
                 <p class="text-lg font-black text-green-400 mb-4">${precoFormatado}</p>
@@ -151,7 +161,7 @@
 
       } catch (error) {
         console.error("Erro na busca:", error);
-        grid.innerHTML = '<div class="col-span-full py-12 text-center text-red-400">Falha ao carregar os dados do Mercado Livre. Tente novamente.</div>';
+        grid.innerHTML = '<div class="col-span-full py-12 text-center text-red-400">Falha ao carregar os dados do Mercado Livre. Tente novamente em instantes.</div>';
       }
     }
 
@@ -164,7 +174,7 @@
 
     // Carga inicial automatizada
     window.addEventListener('DOMContentLoaded', () => {
-      buscar('camera ptz live igreja');
+      buscar('camera ptz');
     });
   </script>
 </body>
